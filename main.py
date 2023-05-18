@@ -19,8 +19,8 @@ class LightSensor():
             sum = sum + self.adc_pin.read_u16()
             utime.sleep(0.5)
             
-        self.LIGHT_READING_UPPER_LIMIT = (sum / 10.0) + 2000
-        self.LIGHT_READING_LOWER_LIMIT = (sum / 10.0) - 2000
+        self.LIGHT_READING_UPPER_LIMIT = (sum / 10.0) + 200
+        self.LIGHT_READING_LOWER_LIMIT = (sum / 10.0) - 200
         print("UPPER:", self.LIGHT_READING_UPPER_LIMIT)
         print("LOWER:", self.LIGHT_READING_LOWER_LIMIT)
         
@@ -36,6 +36,45 @@ class LightSensor():
             return False
 
 # END_CLASS
+
+class DistanceSensor():
+    def __init__(self, trigger_pin, echo_pin):
+        self.trigger = Pin(trigger_pin, Pin.OUT)
+        self.echo = Pin(echo_pin, Pin.IN)
+        self.calibrate_distance()
+        
+    def get_distance(self):
+        self.trigger.low()
+        utime.sleep_us(2)
+        self.trigger.high()
+        utime.sleep_us(5)
+        self.trigger.low()
+        while self.echo.value() == 0:
+            signaloff = utime.ticks_us()
+        while self.echo.value() == 1:
+            signalon = utime.ticks_us()
+        timepassed = signalon - signaloff #Calculate the on and off signal
+        self.distance = (timepassed * 0.0343) / 2 #Calculate the distance - speed of sound?
+        return self.distance
+    def calibrate_distance(self):
+        print("Distance calibrating in progress...")
+        sum = 0
+        for i in range(0,10):
+            sum += self.get_distance()
+            utime.sleep(0.5)
+        self.CALIBRATED_DISTANCE_LOWER = (sum / 10.0) - 20
+        self.CALIBRATED_DISTANCE_UPPER = (sum / 10.0) + 20
+        
+        print("UPPER:", self.CALIBRATED_DISTANCE_UPPER)
+        print("LOWER:", self.CALIBRATED_DISTANCE_LOWER)
+    def distance_tripped(self):
+        distance = self.get_distance()
+        
+        if (distance > self.CALIBRATED_DISTANCE_UPPER or distance < self.CALIBRATED_DISTANCE_LOWER):
+            return True
+        else:
+            return False
+        
 
 @rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, out_shiftdir=rp2.PIO.SHIFT_LEFT, autopull=True, pull_thresh=24)
 def ws2812():
@@ -78,59 +117,64 @@ class RGBLED():
     def pixels_fill(self, color):
         for i in range(len(self.ar)):
             self.pixels_set(i, color)
+            
+class Alarm():
+    
+    def __init__ (self, buzzer_pin):
+        self.buzzer = PWM(Pin(buzzer_pin))
+        self.led = RGBLED()
+        
+    def sound_alarm(self):
+        for i in range(0,10):
+            self.alarm_settings()
+    
+    def alarm_settings(self):
+            self.buzzer.duty_u16(32767)
+            self.buzzer.freq(1000)
+            self.led.pixels_fill((255,0,0))
+            self.led.pixels_show()
+            utime.sleep(0.5)
+            self.buzzer.freq(500)
+            self.led.pixels_fill((0,0,255))
+            self.led.pixels_show()
+            utime.sleep(0.5)
+            self.buzzer.duty_u16(0)
+            self.led.pixels_fill((0,0,0))
+            self.led.pixels_show()
+    
+    def stop_alarm(self):
+        self.led.pixels_fill((0,0,0))
+        self.led.pixels_show()
+        self.buzzer.duty_u16(0)
 
         
 
 #Declaration
-led = RGBLED()
-trigger = Pin(16, Pin.OUT)
-echo = Pin(17, Pin.IN)
-buzzer = PWM(Pin(20))
-buzzer.duty_u16(0)
+alarm = Alarm(20)
+distance_sensor = DistanceSensor(16, 17)
 light_sensor = LightSensor(27)
+armed_light = Pin(7, Pin.OUT)
 
-def toggle_alarm():
-    buzzer.duty_u16(32767)
-    buzzer.freq(1000)
-    led.pixels_fill((255,0,0))
-    led.pixels_show()
-    utime.sleep(0.5)
-    buzzer.freq(500)
-    led.pixels_fill((0,0,255))
-    led.pixels_show()
-    utime.sleep(0.5)
-    buzzer.duty_u16(0)
-    led.pixels_fill((0,0,0))
-    led.pixels_show()
+def show_armed():
+    for i in range(0,4):
+        armed_light.on()
+        utime.sleep(0.5)
+        armed_light.off()
+        utime.sleep(0.5)
 
-def alarm():
-    for i in range(0,10):
-        toggle_alarm()
-
-def ultra():
-    trigger.low()
-    utime.sleep_us(2)
-    trigger.high()
-    utime.sleep_us(5)
-    trigger.low()
-    while echo.value() == 0:
-        signaloff = utime.ticks_us()
-    while echo.value() == 1:
-        signalon = utime.ticks_us()
-    timepassed = signalon - signaloff #Calculate the on and off signal
-    distance = (timepassed * 0.0343) / 2 #Calculate the distance - speed of sound?
-    print("Object at", distance, "cm")
+def check_sensors():
+    print("Object at",distance_sensor.get_distance() , "cm")
     print("Light reading:", light_sensor.get_lux())
 
-    if distance < 100 or light_sensor.light_is_on():
-        alarm()
+    if distance_sensor.distance_tripped() or light_sensor.light_is_on():
+        alarm.sound_alarm()
     else:
-        led.pixels_fill((0,0,0))
-        led.pixels_show()
+        alarm.stop_alarm()
 
+show_armed()
 while True:
-    buzzer.duty_u16(0)
-    utime.sleep(1)
-    ultra()
-    utime.sleep(0.5)
+    alarm.stop_alarm()
+    utime.sleep(0.25)
+    check_sensors()
+    utime.sleep(0.25)
 
