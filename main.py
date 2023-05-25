@@ -2,6 +2,29 @@ from machine import Pin, PWM, ADC
 import array
 import utime
 import rp2
+from mfrc522 import MFRC522
+
+class RFID():
+    def __init__(self):
+        self.reader = MFRC522(spi_id=0, sck=2, miso=4, mosi=3, cs=1, rst=0)
+        self.registered_uids = [[0x03, 0x5A, 0x0C, 0x0E]]
+
+    def scan_card(self):
+        self.reader.init()
+        (stat, tag_type) = self.reader.request(self.reader.REQIDL)
+        if stat == self.reader.OK:
+            (stat, uid) = self.reader.SelectTagSN()
+
+            if stat == self.reader.OK:
+                print("Card detected {}  uid={}".format(hex(int.from_bytes(bytes(uid), "little", False)).upper(), self.reader.tohexstring(uid)))
+
+                if uid in self.registered_uids:
+                    return True
+                else:
+                    return False
+        else:
+            return False
+
 
 # Light Sensor (LDR) Class
 class LightSensor():
@@ -123,8 +146,10 @@ class Alarm():
     def __init__ (self, buzzer_pin):
         self.buzzer = PWM(Pin(buzzer_pin))
         self.led = RGBLED()
+        self.on = False
         
     def sound_alarm(self):
+        self.on = True
         for i in range(0,10):
             self.alarm_settings()
     
@@ -143,24 +168,57 @@ class Alarm():
             self.led.pixels_show()
     
     def stop_alarm(self):
+        self.on = False
         self.led.pixels_fill((0,0,0))
         self.led.pixels_show()
         self.buzzer.duty_u16(0)
+    
+    def is_on(self):
+        return self.on
+        
+
+class ArmedLight():
+    
+    def __init__ (self, led_pin):
+        self.led = Pin(led_pin, Pin.OUT)
+        self.armed = False
+        
+    def turn_on(self):
+        self.led.on()
+    
+    def turn_off(self):
+        self.led.off()
+    
+    def show_calibrated(self):
+        for i in range(0,8):
+            self.led.on()
+            utime.sleep(0.25)
+            self.led.off()
+            utime.sleep(0.25)
+    
+    def show_disarmed(self):
+        self.armed = False
+        self.led.on()
+        
+    def show_armed(self):
+        self.armed = True
+        for i in range(0,4):
+            self.led.on()
+            utime.sleep(1)
+            self.led.off()
+            utime.sleep(1)
+            
+    def is_armed(self):
+        return self.armed
 
         
 
 #Declaration
+rfid = RFID()
 alarm = Alarm(20)
 distance_sensor = DistanceSensor(16, 17)
 light_sensor = LightSensor(27)
-armed_light = Pin(7, Pin.OUT)
-
-def show_armed():
-    for i in range(0,4):
-        armed_light.on()
-        utime.sleep(0.5)
-        armed_light.off()
-        utime.sleep(0.5)
+armed_light = ArmedLight(7)
 
 def check_sensors():
     print("Object at",distance_sensor.get_distance() , "cm")
@@ -171,10 +229,28 @@ def check_sensors():
     else:
         alarm.stop_alarm()
 
-show_armed()
-while True:
-    alarm.stop_alarm()
-    utime.sleep(0.25)
-    check_sensors()
-    utime.sleep(0.25)
+
+alarm.stop_alarm()
+armed_light.show_calibrated()
+utime.sleep(1)
+armed_light.show_disarmed()
+if rfid.scan_card():
+    armed_light.show_armed()
+    while True:
+        if alarm.is_on():
+            if rfid.scan_card():
+                alarm.stop_alarm()
+                armed_light.show_disarmed()
+                utime.sleep(2)
+        else:
+            if armed_light.is_armed(): 
+                utime.sleep(0.25)
+                check_sensors()
+                utime.sleep(0.25)
+            else:
+                if rfid.scan_card():
+                    armed_light.show_armed()
+                    utime.sleep(2)
+
+
 
