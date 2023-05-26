@@ -10,6 +10,7 @@ class RFID():
         self.registered_uids = [[0x03, 0x5A, 0x0C, 0x0E]]
 
     def scan_card(self):
+        print("Trying to read a card")
         self.reader.init()
         (stat, tag_type) = self.reader.request(self.reader.REQIDL)
         if stat == self.reader.OK:
@@ -42,8 +43,8 @@ class LightSensor():
             sum = sum + self.adc_pin.read_u16()
             utime.sleep(0.5)
             
-        self.LIGHT_READING_UPPER_LIMIT = (sum / 10.0) + 200
-        self.LIGHT_READING_LOWER_LIMIT = (sum / 10.0) - 200
+        self.LIGHT_READING_UPPER_LIMIT = (sum / 10.0) + 400
+        self.LIGHT_READING_LOWER_LIMIT = (sum / 10.0) - 400
         print("UPPER:", self.LIGHT_READING_UPPER_LIMIT)
         print("LOWER:", self.LIGHT_READING_LOWER_LIMIT)
         
@@ -52,6 +53,7 @@ class LightSensor():
     def light_is_on(self):
         # get light level reading
         light_level = self.adc_pin.read_u16()
+        print("Light level is ", light_level, "lux")
         # compare reading to lower and upper limit
         if (light_level < self.LIGHT_READING_LOWER_LIMIT or light_level > self.LIGHT_READING_UPPER_LIMIT):
             return True
@@ -92,6 +94,7 @@ class DistanceSensor():
         print("LOWER:", self.CALIBRATED_DISTANCE_LOWER)
     def distance_tripped(self):
         distance = self.get_distance()
+        print("Object at", self.distance, "cm")
         
         if (distance > self.CALIBRATED_DISTANCE_UPPER or distance < self.CALIBRATED_DISTANCE_LOWER):
             return True
@@ -150,8 +153,7 @@ class Alarm():
         
     def sound_alarm(self):
         self.on = True
-        for i in range(0,10):
-            self.alarm_settings()
+        self.alarm_settings()
     
     def alarm_settings(self):
             self.buzzer.duty_u16(32767)
@@ -175,6 +177,22 @@ class Alarm():
     
     def is_on(self):
         return self.on
+
+    def armed_sound(self):
+        for i in range(0,4):
+            self.buzzer.duty_u16(32767)
+            self.buzzer.freq(1000)
+            utime.sleep(0.5)
+            self.buzzer.duty_u16(0)
+            utime.sleep(0.5)
+            
+    def disarmed_sound(self):
+        for i in range(0,4):
+            self.buzzer.duty_u16(32767)
+            self.buzzer.freq(500)
+            utime.sleep(0.5)
+            self.buzzer.duty_u16(0)
+            utime.sleep(0.5)
         
 
 class ArmedLight():
@@ -182,12 +200,6 @@ class ArmedLight():
     def __init__ (self, led_pin):
         self.led = Pin(led_pin, Pin.OUT)
         self.armed = False
-        
-    def turn_on(self):
-        self.led.on()
-    
-    def turn_off(self):
-        self.led.off()
     
     def show_calibrated(self):
         for i in range(0,8):
@@ -198,7 +210,7 @@ class ArmedLight():
     
     def show_disarmed(self):
         self.armed = False
-        self.led.on()
+        self.led.off()
         
     def show_armed(self):
         self.armed = True
@@ -207,6 +219,7 @@ class ArmedLight():
             utime.sleep(1)
             self.led.off()
             utime.sleep(1)
+        self.led.on()
             
     def is_armed(self):
         return self.armed
@@ -234,23 +247,36 @@ alarm.stop_alarm()
 armed_light.show_calibrated()
 utime.sleep(1)
 armed_light.show_disarmed()
-if rfid.scan_card():
-    armed_light.show_armed()
-    while True:
-        if alarm.is_on():
-            if rfid.scan_card():
-                alarm.stop_alarm()
-                armed_light.show_disarmed()
-                utime.sleep(2)
-        else:
-            if armed_light.is_armed(): 
-                utime.sleep(0.25)
-                check_sensors()
-                utime.sleep(0.25)
-            else:
+alarm.disarmed_sound()
+
+while True:
+    if rfid.scan_card():
+        armed_light.show_armed()
+        alarm.armed_sound()
+        while True:
+            if alarm.is_on():
+                alarm.sound_alarm()
                 if rfid.scan_card():
-                    armed_light.show_armed()
+                    alarm.stop_alarm()
+                    armed_light.show_disarmed()
+                    alarm.disarmed_sound()
                     utime.sleep(2)
-
-
-
+            else:
+                if armed_light.is_armed():
+                    if rfid.scan_card():
+                        alarm.stop_alarm()
+                        armed_light.show_disarmed()
+                        alarm.disarmed_sound()
+                        utime.sleep(2)
+                        continue
+                    utime.sleep(0.25)
+                    check_sensors()
+                    utime.sleep(0.25)
+                else:
+                    if rfid.scan_card():
+                        distance_sensor.calibrate_distance()
+                        light_sensor.calibrate_light()
+                        armed_light.show_calibrated()
+                        armed_light.show_armed()
+                        alarm.armed_sound()                        
+                        utime.sleep(2)
