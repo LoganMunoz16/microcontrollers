@@ -11,7 +11,7 @@ class WiFi():
         self.esp8266_at_ver = None
         
     def connect(self):
-        self.wifi.connectWiFi("DS Stylelit","Password01")
+        self.wifi.connectWiFi("LoganPhone","password")
         
     def disconnect(self):
         self.wifi.disconnectWiFi()
@@ -271,34 +271,34 @@ utime.sleep(1)
 armed_light.show_disarmed()
 alarm.disarmed_sound()
 
-alarm_loop_counter = 0
+alarm_loop_counter = 1
 
 while True:
     if rfid.scan_card():
+        notification.connect()
         armed_light.show_armed()
         alarm.armed_sound()
-        #notification.connect()
         while True:
             if alarm.is_on():
                 alarm.sound_alarm()
                 alarm_loop_counter = alarm_loop_counter + 1
-                #if alarm_loop_counter == 1 or alarm_loop_counter % 10 == 0:
-                    #notification.send_alert()
+                if alarm_loop_counter % 10 == 0:
+                    notification.send_alert()
                     
                 if rfid.scan_card():
                     alarm.stop_alarm()
+                    notification.disconnect()
                     armed_light.show_disarmed()
                     alarm.disarmed_sound()
-                    #notification.disconnect()
                     alarm_loop_counter = 0
                     utime.sleep(2)
             else:
                 if armed_light.is_armed():
                     if rfid.scan_card():
                         alarm.stop_alarm()
+                        notification.disconnect()
                         armed_light.show_disarmed()
                         alarm.disarmed_sound()
-                        notification.disconnect()
                         utime.sleep(2)
                         continue
                     utime.sleep(0.25)
@@ -309,7 +309,7 @@ while True:
                         distance_sensor.calibrate_distance()
                         light_sensor.calibrate_light()
                         armed_light.show_calibrated()
+                        notification.connect()
                         armed_light.show_armed()
                         alarm.armed_sound()
-                        notification.connect()
                         utime.sleep(2)
