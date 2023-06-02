@@ -3,7 +3,22 @@ import array
 import utime
 import rp2
 from mfrc522 import MFRC522
+from esp8266 import ESP8266
 
+class WiFi():
+    def __init__(self):
+        self.wifi = ESP8266()
+        self.esp8266_at_ver = None
+        
+    def connect(self):
+        self.wifi.connectWiFi("DS Stylelit","Password01")
+        
+    def disconnect(self):
+        self.wifi.disconnectWiFi()
+        
+    def send_alert(self):
+        self.httpCode, self.httpRes = self.wifi.doHttpGet("maker.ifttt.com","/trigger/alarm_trigger/json/with/key/yPlK3vBbmFurEZRSVqjW8S3UmsyDzaGd8wsY6Y5kfW","RaspberryPi-Pico", port=80)
+        
 class RFID():
     def __init__(self):
         self.reader = MFRC522(spi_id=0, sck=2, miso=4, mosi=3, cs=1, rst=0)
@@ -43,8 +58,8 @@ class LightSensor():
             sum = sum + self.adc_pin.read_u16()
             utime.sleep(0.5)
             
-        self.LIGHT_READING_UPPER_LIMIT = (sum / 10.0) + 400
-        self.LIGHT_READING_LOWER_LIMIT = (sum / 10.0) - 400
+        self.LIGHT_READING_UPPER_LIMIT = (sum / 10.0) + 500
+        self.LIGHT_READING_LOWER_LIMIT = (sum / 10.0) - 500
         print("UPPER:", self.LIGHT_READING_UPPER_LIMIT)
         print("LOWER:", self.LIGHT_READING_LOWER_LIMIT)
         
@@ -200,6 +215,12 @@ class ArmedLight():
     def __init__ (self, led_pin):
         self.led = Pin(led_pin, Pin.OUT)
         self.armed = False
+        
+    def turn_on(self):
+        self.led.on()
+    
+    def turn_off(self):
+        self.led.off()
     
     def show_calibrated(self):
         for i in range(0,8):
@@ -227,9 +248,10 @@ class ArmedLight():
         
 
 #Declaration
+notification = WiFi()
 rfid = RFID()
 alarm = Alarm(20)
-distance_sensor = DistanceSensor(16, 17)
+distance_sensor = DistanceSensor(18, 19)
 light_sensor = LightSensor(27)
 armed_light = ArmedLight(7)
 
@@ -249,17 +271,26 @@ utime.sleep(1)
 armed_light.show_disarmed()
 alarm.disarmed_sound()
 
+alarm_loop_counter = 0
+
 while True:
     if rfid.scan_card():
         armed_light.show_armed()
         alarm.armed_sound()
+        #notification.connect()
         while True:
             if alarm.is_on():
                 alarm.sound_alarm()
+                alarm_loop_counter = alarm_loop_counter + 1
+                #if alarm_loop_counter == 1 or alarm_loop_counter % 10 == 0:
+                    #notification.send_alert()
+                    
                 if rfid.scan_card():
                     alarm.stop_alarm()
                     armed_light.show_disarmed()
                     alarm.disarmed_sound()
+                    #notification.disconnect()
+                    alarm_loop_counter = 0
                     utime.sleep(2)
             else:
                 if armed_light.is_armed():
@@ -267,6 +298,7 @@ while True:
                         alarm.stop_alarm()
                         armed_light.show_disarmed()
                         alarm.disarmed_sound()
+                        notification.disconnect()
                         utime.sleep(2)
                         continue
                     utime.sleep(0.25)
@@ -278,5 +310,6 @@ while True:
                         light_sensor.calibrate_light()
                         armed_light.show_calibrated()
                         armed_light.show_armed()
-                        alarm.armed_sound()                        
+                        alarm.armed_sound()
+                        notification.connect()
                         utime.sleep(2)
