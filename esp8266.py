@@ -39,7 +39,7 @@ class ESP8266:
     __txData=None
     __httpResponse=None
     
-    def __init__(self, uartPort=0 ,baudRate=115200, txPin=(0), rxPin=(1)):
+    def __init__(self, uartPort=0 ,baudRate=115200, txPin=(12), rxPin=(13)):
         """
         The constaructor for ESP8266 class
         
@@ -76,7 +76,7 @@ class ESP8266:
         """
         self.__rxData=str()
         self.__txData=atCMD
-        #print("---------------------------"+self.__txData)
+        print("---------------------------"+self.__txData)
         self.__uartObj.write(self.__txData)
         self.__rxData=bytes()
         
@@ -85,16 +85,16 @@ class ESP8266:
         #while self.__uartObj.any()>0:
         #    self.__rxData += self.__uartObj.read(1)
         
-        while True:
-            #print(".")
-            if self.__uartObj.any()>0:
-                #print(self.__uartObj.any())
-                break
+#         while True:
+#             print(".")
+#             if self.__uartObj.any()>0:
+#                 print(self.__uartObj.any())
+#                 break
         
         while self.__uartObj.any()>0:
             self.__rxData += self.__uartObj.read(UART_Rx_BUFFER_LENGTH)
             
-        #print(self.__rxData)
+        print(self.__rxData)
         if ESP8266_OK_STATUS in self.__rxData:
             return self.__rxData
         elif ESP8266_ERROR_STATUS in self.__rxData:
@@ -362,10 +362,10 @@ class ESP8266:
             WIFI CONNECTED when ESP8266 successfully connect with the target AP
         """
         txData="AT+CWJAP_CUR="+'"'+ssid+'"'+','+'"'+pwd+'"'+"\r\n"
-        #print(txData)
+        print(txData)
         retData = self._sendToESP8266(txData, delay=15)
-        #print(".....")
-        #print(retData)
+        print(".....")
+        print(retData)
         if(retData!=None):
             if "+CWJAP" in retData:
                 if "1" in retData:
@@ -513,3 +513,4 @@ class ESP8266:
         print('Destructor called, ESP8266 deleted.')
         pass
         
+
